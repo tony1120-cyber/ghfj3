@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DARK CORRIDOR</title>
+<style>
+  body { margin:0; overflow:hidden; background:#000; font-family:Arial,sans-serif; color:white; }
+  #ui { position:fixed; top:20px; left:20px; z-index:2; text-shadow:0 0 8px red; line-height:1.8; }
+  #crosshair { position:fixed; top:50%; left:50%; z-index:2; transform:translate(-50%,-50%); font-size:22px; pointer-events:none; }
+  #message { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; flex-direction:column; background:#000c; z-index:5; text-align:center; padding:20px; }
+  button { padding:14px 25px; background:#8b0000; color:white; border:1px solid #f55; cursor:pointer; font-size:17px; }
+  #hint { position:fixed; bottom:25px; width:100%; text-align:center; z-index:2; color:#ddd; pointer-events:none; }
+  #jumpscare { display:none; position:fixed; inset:0; z-index:10; background:#120000; align-items:center; justify-content:center; flex-direction:column; overflow:hidden; }
+  #jumpscare.show { display:flex; animation: scareFlash .12s steps(2,end) infinite; }
+  #scareFace { position:relative; width:min(78vw,520px); height:min(78vw,520px); background:radial-gradient(ellipse at 50% 45%,#333 0%,#090909 58%,#000 72%); clip-path:polygon(50% 0%,83% 13%,100% 48%,80% 93%,50% 100%,17% 89%,0 48%,18% 12%); filter:drop-shadow(0 0 25px #f00); transform:scale(1.12); }
+  .scareEye { position:absolute; top:30%; width:19%; height:13%; background:#ff1010; border-radius:50%; box-shadow:0 0 30px 12px #f00; }
+  #eyeL { left:19%; transform:rotate(18deg); } #eyeR { right:19%; transform:rotate(-18deg); }
+  #scareMouth { position:absolute; left:23%; top:55%; width:54%; height:28%; background:#000; border:5px solid #4a0000; clip-path:polygon(0 0,100% 0,82% 100%,18% 100%); }
+  #scareMouth:after { content:""; position:absolute; inset:0; background:repeating-linear-gradient(90deg,#ddd 0 8%,#160000 8% 13%); clip-path:polygon(0 0,100% 0,90% 28%,10% 28%); }
+  #scareText { color:#ff1111; font-weight:900; font-size:clamp(30px,8vw,76px); letter-spacing:5px; text-shadow:0 0 18px red; margin-top:8px; }
+  @keyframes scareFlash { 0% { background:#000; } 50% { background:#510000; } 100% { background:#120000; } }
+
+  #mobileControls { display:none; position:fixed; inset:0; z-index:4; pointer-events:none; }
+  #joystickBase { position:absolute; left:22px; bottom:38px; width:130px; height:130px; border-radius:50%; background:#ffffff20; border:2px solid #ffffff55; pointer-events:auto; touch-action:none; }
+  #joystickKnob { position:absolute; left:39px; top:39px; width:48px; height:48px; border-radius:50%; background:#ffffff88; border:2px solid #ffffffaa; }
+  .touchBtn { position:absolute; right:22px; width:66px; height:66px; border-radius:50%; background:#521c1ccc; border:2px solid #ffffff88; color:white; font-size:13px; pointer-events:auto; touch-action:none; }
+  #flashBtn { right:26px; bottom:44px; }
+  #useBtn { right:102px; bottom:118px; }
+  #lookArea { position:absolute; top:0; right:0; width:58%; height:75%; pointer-events:auto; touch-action:none; }
+  @media (pointer:coarse), (max-width:800px) { #mobileControls { display:block; } #hint { bottom:180px; font-size:12px; } #ui { top:10px; left:10px; font-size:13px; } }
+</style>
+</head>
+<body>
+<div id="ui"><b>DARK CORRIDOR</b><br>열쇠: <span id="keys">0</span> / 3<br>손전등: <span id="battery">100</span>%<br><span id="status">출구를 찾아라.</span></div>
+<div id="crosshair">+</div>
+<div id="hint">WASD 이동 · 마우스/터치 시점 · F 손전등 · E 상호작용</div>
+<div id="mobileControls">
+  <div id="lookArea" aria-label="화면을 드래그해 시점 이동"></div>
+  <div id="joystickBase"><div id="joystickKnob"></div></div>
+  <button class="touchBtn" id="flashBtn">손전등</button>
+  <button class="touchBtn" id="useBtn">상호작용</button>
+</div>
+<div id="message"><h1 id="title">DARK CORRIDOR</h1><p id="desc">열쇠 3개를 찾고 탈출하라.<br>어둠 속의 무언가가 당신을 찾고 있다.</p><button id="start">게임 시작</button></div>
+<div id="jumpscare" aria-hidden="true"><div id="scareFace"><div id="eyeL" class="scareEye"></div><div id="eyeR" class="scareEye"></div><div id="scareMouth"></div></div><div id="scareText">잡혔다!</div></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x15191c);
+scene.fog = new THREE.FogExp2(0x15191c, 0.022);
+const camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 100);
+camera.rotation.order = 'YXZ';
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0x506070,0x080808,0.22));
+const flashlight = new THREE.SpotLight(0xffefcf,45,17,Math.PI/7,0.45,1.5);
+flashlight.castShadow = true;
+scene.add(flashlight,flashlight.target);
+// 공중에서도 빛줄기가 보이도록 반투명한 손전등 빔을 추가
+const beamMaterial = new THREE.MeshBasicMaterial({color:0xffe8b0,transparent:true,opacity:0.105,side:THREE.DoubleSide,depthWrite:false,blending:THREE.AdditiveBlending});
+const beam = new THREE.Mesh(new THREE.ConeGeometry(3.2,15,32,1,true),beamMaterial);
+beam.frustumCulled=false; beam.renderOrder=2; scene.add(beam);
+const mat=(color,roughness=0.9)=>new THREE.MeshStandardMaterial({color,roughness});
+const floorMat=mat(0x242725), wallMat=mat(0x343332), ceilingMat=mat(0x17191b), doorMat=mat(0x493329);
+const obstacles=[];
+function block(x,y,z,sx,sy,sz,material,solid=true){
+ const mesh=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,sz),material);
+ mesh.position.set(x,y,z); mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
+ if(solid) obstacles.push({x,z,hx:sx/2,hz:sz/2});
+ return mesh;
+}
+block(0,-0.15,0,22,0.3,32,floorMat,false);
+block(0,3.3,0,22,0.3,32,ceilingMat,false);
+block(-11,1.5,0,0.5,3,32,wallMat);
+block(11,1.5,0,0.5,3,32,wallMat);
+block(0,1.5,-16,22,3,0.5,wallMat);
+block(0,1.5,16,22,3,0.5,wallMat);
+block(-5,1.5,-7,0.5,3,10,wallMat);
+block(4,1.5,5,0.5,3,10,wallMat);
+block(0,1.5,-11,5,3,0.5,wallMat);
+block(-7,1.5,4,7,3,0.5,wallMat);
+for(const [x,z] of [[-6,-12],[6,-5],[-6,2],[7,11]]){
+ const lamp=new THREE.PointLight(0x99bbcc,2,7); lamp.position.set(x,2.7,z); scene.add(lamp);
+ const bulb=new THREE.Mesh(new THREE.BoxGeometry(0.8,0.08,0.3),new THREE.MeshBasicMaterial({color:0x9bb5bb}));
+ bulb.position.set(x,2.9,z); scene.add(bulb);
+}
+const player=new THREE.Vector3(0,1.65,12); camera.position.copy(player);
+let yaw=0,pitch=0,playing=false,won=false,lost=false,keysFound=0,battery=100,flashlightOn=true;
+const held={},collectibles=[];
+function makeKey(x,z){
+ const group=new THREE.Group(),gold=new THREE.MeshStandardMaterial({color:0xffc928,metalness:0.75,roughness:0.25});
+ const ring=new THREE.Mesh(new THREE.TorusGeometry(0.18,0.055,8,16),gold); ring.position.y=0.18; group.add(ring);
+ const stem=new THREE.Mesh(new THREE.BoxGeometry(0.09,0.35,0.09),gold); stem.position.y=-0.05; group.add(stem);
+ group.position.set(x,0.8,z); scene.add(group); collectibles.push(group);
+}
+makeKey(7,12); makeKey(-8,-2); makeKey(7,-12);
+const exit=block(0,1.5,-15.5,2.5,2.8,0.3,doorMat,false);
+const exitLight=new THREE.PointLight(0xff0000,2,5); exitLight.position.set(0,2,-14); scene.add(exitLight);
+const monster=new THREE.Group(),dark=mat(0x111313),eyeMat=new THREE.MeshBasicMaterial({color:0xff1010});
+const body=new THREE.Mesh(new THREE.CapsuleGeometry(0.48,1.0,4,8),dark); body.position.y=1; monster.add(body);
+for(const x of [-0.18,0.18]){const eye=new THREE.Mesh(new THREE.SphereGeometry(0.075,8,8),eyeMat); eye.position.set(x,1.65,-0.39); monster.add(eye);}
+monster.position.set(8,0,-10); scene.add(monster);
+const clamp=THREE.MathUtils.clamp;
+function blocked(x,z){return obstacles.some(o=>Math.abs(x-o.x)<o.hx+0.38&&Math.abs(z-o.z)<o.hz+0.38);}
+function movePlayer(dx,dz){if(!blocked(player.x+dx,player.z))player.x+=dx;if(!blocked(player.x,player.z+dz))player.z+=dz;}
+let scareTimer=null;
+function showEnd(title,desc){
+ playing=false;document.exitPointerLock?.();
+ if(title==='GAME OVER'){
+  const scare=document.getElementById('jumpscare');scare.classList.add('show');scare.style.display='flex';
+  if(scareTimer)clearTimeout(scareTimer);
+  scareTimer=setTimeout(()=>{scare.classList.remove('show');scare.style.display='none';showEndScreen(title,desc);},1250);
+  return;
+ }
+ showEndScreen(title,desc);
+}
+function showEndScreen(title,desc){document.getElementById('title').textContent=title;document.getElementById('desc').textContent=desc;document.getElementById('start').textContent='다시 시작';document.getElementById('message').style.display='flex';}
+function restart(){
+ if(scareTimer)clearTimeout(scareTimer);document.getElementById('jumpscare').classList.remove('show');document.getElementById('jumpscare').style.display='none';
+ player.set(0,1.65,12);camera.position.copy(player);yaw=0;pitch=0;keysFound=0;battery=100;flashlightOn=true;won=lost=false;
+ collectibles.forEach(k=>k.visible=true);monster.position.set(8,0,-10);
+ document.getElementById('keys').textContent='0';document.getElementById('battery').textContent='100';
+ document.getElementById('status').textContent='출구를 찾아라.';exit.material.color.set(0x493329);
+}
+document.getElementById('start').addEventListener('click',()=>{
+ if(lost||won)restart();document.getElementById('message').style.display='none';playing=true;renderer.domElement.requestPointerLock();
+});
+document.addEventListener('pointerlockchange',()=>{if(document.pointerLockElement!==renderer.domElement&&playing && !('ontouchstart' in window))playing=false;});
+
+// 모바일: 왼쪽 조이스틱 이동, 오른쪽 드래그로 시점 회전
+const joyBase=document.getElementById('joystickBase'), joyKnob=document.getElementById('joystickKnob');
+const lookArea=document.getElementById('lookArea');
+let joyPointer=null, joyX=0, joyY=0, lookPointer=null, lastTouchX=0, lastTouchY=0;
+function setJoy(e){
+ const r=joyBase.getBoundingClientRect(), dx=e.clientX-(r.left+r.width/2), dy=e.clientY-(r.top+r.height/2);
+ const max=42,len=Math.hypot(dx,dy),scale=len>max?max/len:1;
+ joyX=dx*scale/max;joyY=dy*scale/max;joyKnob.style.transform=`translate(${dx*scale}px,${dy*scale}px)`;
+}
+joyBase.addEventListener('pointerdown',e=>{e.preventDefault();joyPointer=e.pointerId;joyBase.setPointerCapture(e.pointerId);setJoy(e);});
+joyBase.addEventListener('pointermove',e=>{if(e.pointerId===joyPointer){e.preventDefault();setJoy(e);}});
+function endJoy(e){if(e.pointerId===joyPointer){joyPointer=null;joyX=joyY=0;joyKnob.style.transform='translate(0,0)';}}
+joyBase.addEventListener('pointerup',endJoy);joyBase.addEventListener('pointercancel',endJoy);
+lookArea.addEventListener('pointerdown',e=>{if(!playing)return;e.preventDefault();lookPointer=e.pointerId;lastTouchX=e.clientX;lastTouchY=e.clientY;lookArea.setPointerCapture(e.pointerId);});
+lookArea.addEventListener('pointermove',e=>{if(e.pointerId!==lookPointer)return;e.preventDefault();yaw-=(e.clientX-lastTouchX)*0.006;pitch-=(e.clientY-lastTouchY)*0.006;pitch=clamp(pitch,-1.35,1.35);lastTouchX=e.clientX;lastTouchY=e.clientY;});
+function endLook(e){if(e.pointerId===lookPointer)lookPointer=null;}
+lookArea.addEventListener('pointerup',endLook);lookArea.addEventListener('pointercancel',endLook);
+document.getElementById('flashBtn').addEventListener('pointerdown',e=>{e.preventDefault();if(playing)flashlightOn=!flashlightOn;});
+document.getElementById('useBtn').addEventListener('pointerdown',e=>{
+ e.preventDefault();if(!playing)return;
+ if(Math.hypot(player.x,player.z+15)<3){
+  if(keysFound===3){won=true;showEnd('탈출 성공','당신은 어둠 속에서 살아남았다.');}
+  else document.getElementById('status').textContent='출구가 잠겨 있다. 열쇠가 더 필요하다.';
+ }
+});
+document.addEventListener('mousemove',e=>{if(!playing)return;yaw-=e.movementX*0.002;pitch-=e.movementY*0.002;pitch=clamp(pitch,-1.35,1.35);});
+document.addEventListener('keydown',e=>{
+ held[e.key.toLowerCase()]=true;
+ if(e.key.toLowerCase()==='f'&&playing)flashlightOn=!flashlightOn;
+ if(e.key.toLowerCase()==='e'&&playing&&Math.hypot(player.x,player.z+15)<3){
+  if(keysFound===3){won=true;showEnd('탈출 성공','당신은 어둠 속에서 살아남았다.');}
+  else document.getElementById('status').textContent='출구가 잠겨 있다. 열쇠가 더 필요하다.';
+ }
+});
+document.addEventListener('keyup',e=>{held[e.key.toLowerCase()]=false;});
+function update(dt){
+ if(!playing)return;
+ camera.rotation.set(pitch,yaw,0,'YXZ');
+ const forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+ const right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+ const move=new THREE.Vector3();
+ if(held.w)move.add(forward);if(held.s)move.sub(forward);if(held.d)move.add(right);if(held.a)move.sub(right);move.addScaledVector(forward,-joyY);move.addScaledVector(right,joyX);
+ if(move.lengthSq()>0){move.normalize().multiplyScalar(3.5*dt);movePlayer(move.x,move.z);}
+ camera.position.copy(player);
+ flashlight.position.copy(camera.position);
+ const direction=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+ flashlight.target.position.copy(camera.position).add(direction.clone().multiplyScalar(10));
+ flashlight.visible=flashlightOn;
+ beam.visible=flashlightOn&&battery>0;
+ if(beam.visible){
+  const beamDirection=direction.clone().normalize();
+  beam.position.copy(camera.position).addScaledVector(beamDirection,7.35);
+  beam.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),beamDirection.clone().negate());
+ }
+ if(flashlightOn&&battery>0)battery=Math.max(0,battery-0.8*dt);
+ if(battery<=0)flashlightOn=false;
+ document.getElementById('battery').textContent=Math.floor(battery);
+ collectibles.forEach(k=>{
+  if(!k.visible)return;k.rotation.y+=dt*1.5;k.position.y=0.8+Math.sin(performance.now()*0.003+k.position.x)*0.08;
+  if(player.distanceTo(k.position)<1.3){k.visible=false;keysFound++;document.getElementById('keys').textContent=keysFound;document.getElementById('status').textContent='열쇠를 찾았다!';}
+ });
+ const dx=player.x-monster.position.x,dz=player.z-monster.position.z,dist=Math.hypot(dx,dz);
+ if(dist>1.25){const speed=dist<8?1.65:0.72;const mx=dx/dist*speed*dt,mz=dz/dist*speed*dt;
+  if(!blocked(monster.position.x+mx,monster.position.z))monster.position.x+=mx;
+  if(!blocked(monster.position.x,monster.position.z+mz))monster.position.z+=mz;
+  monster.rotation.y=Math.atan2(dx,dz);
+ }else{lost=true;showEnd('GAME OVER','괴물에게 잡혔다. 다시 도전해 봐.');}
+ if(keysFound===3)document.getElementById('status').textContent='출구로 가서 E를 누르자.';
+}
+let last=performance.now();
+function animate(now){requestAnimationFrame(animate);const dt=Math.min((now-last)/1000,0.05);last=now;update(dt);renderer.render(scene,camera);}
+animate(last);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+</script>
+</body>
+</html>
